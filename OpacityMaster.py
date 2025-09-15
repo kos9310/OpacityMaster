@@ -22,13 +22,7 @@ os.chdir(program_directory)
 # 투명도 초기값
 scaleVal = 50
 
-# 설정 파일 경로 및 기본 핫키
-CONFIG_FILE = os.path.join(program_directory, "hotkey.txt")
-DEFAULT_TOGGLE_HOTKEY = 'z+x+c+v'
-toggle_hotkey = None
-close_hotkey = 'ctrl+alt+shift'
-toggle_hotkey_handle = None
-close_hotkey_handle = None
+hotkey_thread = None
 
 
 # 리소스 경로 설정
@@ -91,67 +85,18 @@ def on_scale_change(value):
     alpha = int(round(float(value) / 100 * 255))
     set_window_transparency(hwnd, alpha)
 
-def load_hotkey():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            val = f.read().strip()
-            if val:
-                return val
-    return DEFAULT_TOGGLE_HOTKEY
+def watch_hotkey():
+    # ctrl+alt+shift 누르면 종료
+    keyboard.add_hotkey('ctrl+alt+shift', lambda: close_target_window(hwnd))
+    # z + x + c + v 누르면 창열기
+    keyboard.add_hotkey('z+x+c+v', lambda: toggle_window())
 
-def save_hotkey(hotkey):
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        f.write(hotkey)
-
-def bind_hotkeys():
-    global close_hotkey_handle, toggle_hotkey_handle
-    if close_hotkey_handle is not None:
-        keyboard.remove_hotkey(close_hotkey_handle)
-    if toggle_hotkey_handle is not None:
-        keyboard.remove_hotkey(toggle_hotkey_handle)
-    close_hotkey_handle = keyboard.add_hotkey(close_hotkey, lambda: close_target_window(hwnd))
-    toggle_hotkey_handle = keyboard.add_hotkey(toggle_hotkey, lambda: toggle_window())
-
-def open_hotkey_dialog():
-    dialog = Toplevel(root)
-    dialog.title("핫키 설정")
-    Label(dialog, text="창 토글 핫키를 입력하세요").pack(padx=20, pady=(20, 10))
-
-    hotkey_var = StringVar(value=toggle_hotkey)
-    Entry(dialog, textvariable=hotkey_var, state="readonly", justify="center").pack(padx=20, pady=(0, 10))
-
-    def capture():
-        global toggle_hotkey_handle, close_hotkey_handle
-        if toggle_hotkey_handle is not None:
-            keyboard.remove_hotkey(toggle_hotkey_handle)
-            toggle_hotkey_handle = None
-        if close_hotkey_handle is not None:
-            keyboard.remove_hotkey(close_hotkey_handle)
-            close_hotkey_handle = None
-        hotkey_var.set(keyboard.read_hotkey(suppress=False))
-
-    def save():
-        global toggle_hotkey
-        new_hotkey = hotkey_var.get()
-        if new_hotkey:
-            toggle_hotkey = new_hotkey
-            save_hotkey(new_hotkey)
-        bind_hotkeys()
-        dialog.destroy()
-
-    def cancel():
-        bind_hotkeys()
-        dialog.destroy()
-
-    dialog.protocol("WM_DELETE_WINDOW", cancel)
-    threading.Thread(target=capture, daemon=True).start()
-
-    btn_frame = Frame(dialog)
-    btn_frame.pack(pady=(0, 20))
-    Button(btn_frame, text="저장", command=save).pack(side=LEFT, padx=10)
-    Button(btn_frame, text="취소", command=cancel).pack(side=LEFT, padx=10)
-
-toggle_hotkey = load_hotkey()
+def start_hotkey_listener():
+    global hotkey_thread
+    print(start_hotkey_listener, hotkey_thread)
+    if hotkey_thread is None or not hotkey_thread.is_alive():
+        hotkey_thread = threading.Thread(target=watch_hotkey, daemon=True)
+        hotkey_thread.start()
 
 def quit_window(icon, item):
     """ 프로그램 종료 """
@@ -189,10 +134,7 @@ scale.pack(pady=10)
 btn = Button(root, text="동기화", command=get_chrome_pip_hwnd)
 btn.pack(anchor="center", pady=10)
 
-btn_hotkey = Button(root, text="핫키 설정", command=open_hotkey_dialog)
-btn_hotkey.pack(anchor="center", pady=5)
-
-bind_hotkeys()
+start_hotkey_listener()
 
 root.withdraw()
 
