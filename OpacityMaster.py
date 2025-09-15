@@ -22,7 +22,11 @@ os.chdir(program_directory)
 # 투명도 초기값
 scaleVal = 50
 
-hotkey_thread = None
+# 설정 파일 경로 및 기본 핫키
+CONFIG_FILE = os.path.join(program_directory, "hotkey.txt")
+DEFAULT_TOGGLE_HOTKEY = 'z+x+c+v'
+toggle_hotkey = None
+close_hotkey = 'ctrl+alt+shift'
 
 
 # 리소스 경로 설정
@@ -85,18 +89,40 @@ def on_scale_change(value):
     alpha = int(round(float(value) / 100 * 255))
     set_window_transparency(hwnd, alpha)
 
-def watch_hotkey():
-    # ctrl+alt+shift 누르면 종료
-    keyboard.add_hotkey('ctrl+alt+shift', lambda: close_target_window(hwnd))
-    # z + x + c + v 누르면 창열기
-    keyboard.add_hotkey('z+x+c+v', lambda: toggle_window())
+def load_hotkey():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            val = f.read().strip()
+            if val:
+                return val
+    return DEFAULT_TOGGLE_HOTKEY
 
-def start_hotkey_listener():
-    global hotkey_thread
-    print(start_hotkey_listener, hotkey_thread)
-    if hotkey_thread is None or not hotkey_thread.is_alive():
-        hotkey_thread = threading.Thread(target=watch_hotkey, daemon=True)
-        hotkey_thread.start()
+def save_hotkey(hotkey):
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        f.write(hotkey)
+
+def bind_hotkeys():
+    keyboard.unhook_all_hotkeys()
+    keyboard.add_hotkey(close_hotkey, lambda: close_target_window(hwnd))
+    keyboard.add_hotkey(toggle_hotkey, lambda: toggle_window())
+
+def open_hotkey_dialog():
+    dialog = Toplevel(root)
+    dialog.title("핫키 설정")
+    Label(dialog, text="새 핫키를 입력하세요").pack(padx=20, pady=20)
+
+    def capture():
+        keyboard.unhook_all_hotkeys()
+        new_hotkey = keyboard.read_hotkey(suppress=False)
+        global toggle_hotkey
+        toggle_hotkey = new_hotkey
+        save_hotkey(new_hotkey)
+        bind_hotkeys()
+        dialog.destroy()
+
+    threading.Thread(target=capture, daemon=True).start()
+
+toggle_hotkey = load_hotkey()
 
 def quit_window(icon, item):
     """ 프로그램 종료 """
@@ -134,7 +160,10 @@ scale.pack(pady=10)
 btn = Button(root, text="동기화", command=get_chrome_pip_hwnd)
 btn.pack(anchor="center", pady=10)
 
-start_hotkey_listener()
+btn_hotkey = Button(root, text="핫키 설정", command=open_hotkey_dialog)
+btn_hotkey.pack(anchor="center", pady=5)
+
+bind_hotkeys()
 
 root.withdraw()
 
