@@ -27,6 +27,8 @@ CONFIG_FILE = os.path.join(program_directory, "hotkey.txt")
 DEFAULT_TOGGLE_HOTKEY = 'z+x+c+v'
 toggle_hotkey = None
 close_hotkey = 'ctrl+alt+shift'
+toggle_hotkey_handle = None
+close_hotkey_handle = None
 
 
 # 리소스 경로 설정
@@ -102,25 +104,52 @@ def save_hotkey(hotkey):
         f.write(hotkey)
 
 def bind_hotkeys():
-    keyboard.unhook_all_hotkeys()
-    keyboard.add_hotkey(close_hotkey, lambda: close_target_window(hwnd))
-    keyboard.add_hotkey(toggle_hotkey, lambda: toggle_window())
+    global close_hotkey_handle, toggle_hotkey_handle
+    if close_hotkey_handle is not None:
+        keyboard.remove_hotkey(close_hotkey_handle)
+    if toggle_hotkey_handle is not None:
+        keyboard.remove_hotkey(toggle_hotkey_handle)
+    close_hotkey_handle = keyboard.add_hotkey(close_hotkey, lambda: close_target_window(hwnd))
+    toggle_hotkey_handle = keyboard.add_hotkey(toggle_hotkey, lambda: toggle_window())
 
 def open_hotkey_dialog():
     dialog = Toplevel(root)
     dialog.title("핫키 설정")
-    Label(dialog, text="새 핫키를 입력하세요").pack(padx=20, pady=20)
+    Label(dialog, text="창 토글 핫키를 입력하세요").pack(padx=20, pady=(20, 10))
+
+    hotkey_var = StringVar(value=toggle_hotkey)
+    Entry(dialog, textvariable=hotkey_var, state="readonly", justify="center").pack(padx=20, pady=(0, 10))
 
     def capture():
-        keyboard.unhook_all_hotkeys()
-        new_hotkey = keyboard.read_hotkey(suppress=False)
+        global toggle_hotkey_handle, close_hotkey_handle
+        if toggle_hotkey_handle is not None:
+            keyboard.remove_hotkey(toggle_hotkey_handle)
+            toggle_hotkey_handle = None
+        if close_hotkey_handle is not None:
+            keyboard.remove_hotkey(close_hotkey_handle)
+            close_hotkey_handle = None
+        hotkey_var.set(keyboard.read_hotkey(suppress=False))
+
+    def save():
         global toggle_hotkey
-        toggle_hotkey = new_hotkey
-        save_hotkey(new_hotkey)
+        new_hotkey = hotkey_var.get()
+        if new_hotkey:
+            toggle_hotkey = new_hotkey
+            save_hotkey(new_hotkey)
         bind_hotkeys()
         dialog.destroy()
 
+    def cancel():
+        bind_hotkeys()
+        dialog.destroy()
+
+    dialog.protocol("WM_DELETE_WINDOW", cancel)
     threading.Thread(target=capture, daemon=True).start()
+
+    btn_frame = Frame(dialog)
+    btn_frame.pack(pady=(0, 20))
+    Button(btn_frame, text="저장", command=save).pack(side=LEFT, padx=10)
+    Button(btn_frame, text="취소", command=cancel).pack(side=LEFT, padx=10)
 
 toggle_hotkey = load_hotkey()
 
